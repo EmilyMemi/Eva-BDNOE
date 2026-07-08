@@ -20,8 +20,6 @@ class VistaConsole:
         return input(" Seleccione una opción: ")
  
     def mostrar_mensaje(self, mensaje):
-        # antes tenía una flecha "->" adelante, se la saqué para
-        # que se vea más limpio
         print(f"\n  {mensaje}")
  
     # ------------------------------------------------------------------
@@ -80,8 +78,8 @@ class VistaConsole:
         except ValueError:
             self.mostrar_mensaje("ERROR: Dato inválido ingresado. Se cancela el registro del viaje.")
             return None
- 
-    # ------------------------------------------------------------------
+        
+        
     # Opcion 2: Telemetria (sensores IoT)
     def solicitar_codigo_ruta(self):
         return input("\n Ingrese el código de la ruta a actualizar: ")
@@ -115,10 +113,8 @@ class VistaConsole:
                 "temperatura_motor_c": temperatura_motor_c,
                 "nivel_combustible_porcentaje": nivel_combustible_porcentaje,
  
-                # OJO: estos dos nombres tienen que ser IDÉNTICOS a los
+                #  estos dos nombres tienen que ser IDÉNTICOS a los
                 # que lee actualizar_telemetria() en el modelo, si no
-                # los datos se guardan pero nunca se usan para calcular
-                # el CO2 ni para detectar alertas
                 "kilometros_recorridos_tramo": km_recorridos,
                 "litros_consumidos": litros_consumidos,
                 "alerta_sistema": alerta_sistema if alerta_sistema else None
@@ -155,7 +151,7 @@ class VistaConsole:
                   f"{timestamp_texto:<20}")
         print("=" * 60)
  
-    # ------------------------------------------------------------------
+
     # Opcion 4: Reporte de Sostenibilidad (osea Huella de Carbono)
     def mostrar_reporte_sostenibilidad(self, reporte_co2):
         """
