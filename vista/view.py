@@ -19,7 +19,7 @@ class VistaConsole:
         return input("Seleccione una opción: ")
 
     def mostrar_mensaje(self, mensaje):
-        print(f" -> {mensaje}")
+        print(f" {mensaje}")
 
     # ------------------------------------------------------------------
     # Opcion 1: Registrar nuevo viaje
