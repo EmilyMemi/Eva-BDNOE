@@ -1,7 +1,2 @@
-python-dotenv
-
-python -m venv venv
-.\venv\Scripts\activate
-pip install -r requirements.txt
-
-#para desgarcar librerias 
+pymongo==4.7.3
+python-dotenv==1.0.1
