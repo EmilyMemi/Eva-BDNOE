@@ -66,10 +66,6 @@ class LogiTrackModel:
                     f"Ese combustible no lo manejamos. Usa uno de estos: "
                     f"{', '.join(self.COMBUSTIBLES_VALIDOS)}."
                 )
- 
-            # float(...) además de validar que sean números, sirve para
-            # atrapar el error si por accidente llega un texto en vez
-            # de un número (ValueError se captura más abajo)
             peso_mercancia_kg = float(peso_mercancia_kg)
             volumen_m3 = float(volumen_m3)
             tiempo_estimado_dias = float(tiempo_estimado_dias)
