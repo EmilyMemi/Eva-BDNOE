@@ -6,8 +6,7 @@ class VistaConsole:
     """
 
     # ------------------------------------------------------------------
-    # Menu principal y mensajes generales
-
+    # Menú principal y mensajes generales
     def mostrar_menu(self):
         print("\n=== Sistema LogiTrack_Global ===")
         print("1. Registrar nuevo viaje (vehículo + conductor + ruta)")
@@ -21,38 +20,35 @@ class VistaConsole:
         print("9. Salir")
         return input("Seleccione una opción: ")
 
-
     def mostrar_mensaje(self, mensaje):
-        print(f" {mensaje}")
+        print(f"\n {mensaje}")
 
     # ------------------------------------------------------------------
-    # Opcion 1: Registrar nuevo viaje
+    # Opción 1: Registrar nuevo viaje
     def solicitar_datos_viaje(self):
-        """
-        Solicita los datos necesarios para registrar un nuevo viaje.
-        Retorna un diccionario con la estructura acordada con el Modelo.
-        """
-        print("\n--- Registro de nuevo viaje ---")
+        print("\n" + "-" * 45)
+        print(" REGISTRO DE NUEVO VIAJE")
+        print("-" * 45)
         try:
-            print("\n[Datos de la Ruta]")
-            codigo_ruta = input("Código de ruta: ")
-            origen = input("Ciudad de origen: ")
-            destino = input("Ciudad de destino: ")
-            tiempo_estimado_dias = float(input("Tiempo estimado (dias): "))
+            print("\n [Datos de la Ruta]")
+            codigo_ruta = input("   Código de ruta: ")
+            origen = input("   Ciudad de origen: ")
+            destino = input("   Ciudad de destino: ")
+            tiempo_estimado_dias = float(input("   Tiempo estimado (días): "))
 
-            print("\n[Datos del Vehículo]")
-            vin = input("VIN del vehículo: ")
-            patente = input("Patente: ")
-            marca = input("Marca: ")
-            modelo_vehiculo = input("Modelo: ")
-            ano_fabricacion = int(input("Año de fabricación: "))
-            tipo_combustible = input("Tipo de combustible (Diesel/Gasolina/GNC/GLP/Híbrido): ")
-            capacidad_carga = float(input("Capacidad de carga máxima (Kg): "))
+            print("\n [Datos del Vehículo]")
+            vin = input("   VIN del vehículo: ")
+            patente = input("   Patente: ")
+            marca = input("   Marca: ")
+            modelo_vehiculo = input("   Modelo: ")
+            ano_fabricacion = int(input("   Año de fabricación: "))
+            tipo_combustible = input("   Tipo de combustible (Diesel/Gasolina/GNC/GLP/Híbrido): ")
+            capacidad_carga = float(input("   Capacidad de carga máxima (Kg): "))
 
-            print("\n[Datos del Conductor]")
-            rut_id = input("RUT/ID del conductor: ")
-            nombre = input("Nombre: ")
-            primer_apellido = input("Primer apellido: ")
+            print("\n [Datos del Conductor]")
+            rut_id = input("   RUT/ID del conductor: ")
+            nombre = input("   Nombre: ")
+            primer_apellido = input("   Primer apellido: ")
 
             return {
                 "codigo_ruta": codigo_ruta,
@@ -75,18 +71,15 @@ class VistaConsole:
                 }
             }
         except ValueError:
-            self.mostrar_mensaje("Error:Dato invalido ingresado. Se cancela el registro del viaje.")
+            self.mostrar_mensaje("ERROR: Dato inválido ingresado. Se cancela el registro del viaje.")
             return None
 
     # ------------------------------------------------------------------
-    # Opcion 2: Telemetria (sensores IoT)
+    # Opción 2: Telemetría (sensores IoT)
     def solicitar_codigo_ruta(self):
         return input("\nIngrese el código de la ruta: ")
 
     def solicitar_datos_telemetria(self):
-    #    Solicita una lectura de sensores IoT para una ruta existente.
-    # Retorna un diccionario con los datos de telemetría.
-    
         print("\n--- Registro de lectura de telemetría ---")
         try:
             latitud = float(input("Latitud actual: "))
@@ -110,18 +103,12 @@ class VistaConsole:
                 "alertas": alerta_sistema if alerta_sistema else None
             }
         except ValueError:
-            self.mostrar_mensaje("Error: Dato inválido ingresado. Se cancela el registro de telemetria.")
+            self.mostrar_mensaje("Error: Dato inválido ingresado. Se cancela el registro de telemetría.")
             return {}
 
-
     # ------------------------------------------------------------------
-    # Opcion 3: Alertas Activas
+    # Opción 3: Alertas Activas
     def mostrar_alertas(self, alertas):
-        """
-        Muestra las alertas activas del sistema.
-        Se espera una lista de diccionarios, cada uno con al menos:
-        codigo_ruta, alerta_sistema y (opcional) datos de ubicación/velocidad.
-        """
         if not alertas:
             print("\nNo hay alertas activas en este momento.")
             return
@@ -135,17 +122,8 @@ class VistaConsole:
                   f"{a.get('velocidad_kmh', '-'):<18}")
 
     # ------------------------------------------------------------------
-    # Opcion 4: Reporte de Sostenibilidad (osea Huella de Carbono)
+    # Opción 4: Reporte de Sostenibilidad
     def mostrar_reporte_sostenibilidad(self, reporte_co2):
-        """
-        Muestra el reporte consolidado de emisiones de CO2.
-        Se espera un diccionario con totales generales, por ejemplo:
-        {
-            "total_km_recorridos": ...,
-            "total_litros_consumidos": ...,
-            "total_co2_kg": ...
-        }
-        """
         if not reporte_co2:
             print("\nNo hay datos suficientes para generar el reporte de sostenibilidad.")
             return
