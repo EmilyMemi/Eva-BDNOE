@@ -3,10 +3,14 @@
 # guardar viajes, actualizar la telemetría de los sensores y sacar
 # los reportes de CO2. El controller.py es el que llama a estas
 # funciones, la vista nunca debería tocar este archivo directamente.
- 
+
+import os
+from dotenv import load_dotenv 
 from pymongo import MongoClient
 from datetime import datetime
 import sys
+
+load_dotenv()  # carga las variables de entorno del archivo .env
  
  
 class LogiTrackModel:
@@ -15,7 +19,7 @@ class LogiTrackModel:
     # lista mejor lo rechazamos antes de guardar cualquier cosa.
     COMBUSTIBLES_VALIDOS = ["Diesel", "Gasolina", "GNC", "GLP", "Híbrido"]
  
-    def __init__(self, uri="mongodb://localhost:27017/", database_name="logitrack_db"):
+    def __init__(self, uri=os.getenv("MONGO_URI"), database_name=os.getenv("DB_NAME")):
         # Apenas se crea el modelo, intento conectarme a Mongo.
         # Si el servicio no está prendido, mejor avisar altiro con un
         # mensaje entendible en vez de que reviente con un error feo.
@@ -37,82 +41,80 @@ class LogiTrackModel:
     # Crear un viaje nuevo
     # ---------------------------------------------------------
     def crear_viaje(self, datos_viaje):
-        
         if not datos_viaje or not isinstance(datos_viaje, dict):
             return False, "No se pudo crear el viaje: los datos ingresados no son válidos."
- 
+
         try:
             codigo_ruta = str(datos_viaje.get("codigo_ruta", "")).strip()
             origen = str(datos_viaje.get("origen", "")).strip()
             destino = str(datos_viaje.get("destino", "")).strip()
-            tipo_combustible = datos_viaje.get("tipo_combustible", "Diesel")
-            peso_mercancia_kg = datos_viaje.get("peso_mercancia_kg", 0)
-            volumen_m3 = datos_viaje.get("volumen_m3", 0)
-            tiempo_estimado_dias = datos_viaje.get("tiempo_estimado_dias", 0)
- 
+            tiempo_estimado_dias = float(datos_viaje.get("tiempo_estimado_dias", 0))
+
+            # Extraer datos del vehículo (acepta formato plano o subdiccionario)
+            vehiculo = datos_viaje.get("vehiculo", {})
+            tipo_combustible = vehiculo.get("tipo_combustible") or datos_viaje.get("tipo_combustible", "Diesel")
+            patente = str(vehiculo.get("patente", datos_viaje.get("patente", ""))).strip().upper()
+            vin = vehiculo.get("vin", datos_viaje.get("vin", ""))
+            marca = vehiculo.get("marca", datos_viaje.get("marca", ""))
+            modelo_vehiculo = vehiculo.get("modelo", datos_viaje.get("modelo", ""))
+            ano_fabricacion = vehiculo.get("ano_fabricacion", datos_viaje.get("ano_fabricacion", 0))
+            capacidad_carga = float(vehiculo.get("capacidad_carga_max_Kg", datos_viaje.get("capacidad_carga_max_Kg", 0)))
+
+            # Extraer datos del conductor
+            conductor = datos_viaje.get("conductor", {})
+            rut_id = str(conductor.get("rut_id", datos_viaje.get("rut_id", ""))).strip()
+            nombre = str(conductor.get("nombre", datos_viaje.get("nombre", ""))).strip()
+            primer_apellido = str(conductor.get("primer_apellido", datos_viaje.get("primer_apellido", ""))).strip()
+
+            # Validaciones
             if not codigo_ruta:
                 return False, "El código de ruta no puede estar vacío."
- 
             if self.existe_ruta(codigo_ruta):
                 return False, f"Ya existe un viaje con el código '{codigo_ruta}'."
- 
-            # antes esto no se revisaba, un viaje se podía crear sin
-            # origen ni destino y quedaba guardado con strings vacíos
             if not origen or not destino:
                 return False, "Debes ingresar la ciudad de origen y de destino."
- 
             if tipo_combustible not in self.COMBUSTIBLES_VALIDOS:
-                return False, (
-                    f"Ese combustible no lo manejamos. Usa uno de estos: "
-                    f"{', '.join(self.COMBUSTIBLES_VALIDOS)}."
-                )
-            peso_mercancia_kg = float(peso_mercancia_kg)
-            volumen_m3 = float(volumen_m3)
-            tiempo_estimado_dias = float(tiempo_estimado_dias)
- 
-            if peso_mercancia_kg < 0 or volumen_m3 < 0:
-                return False, "El peso y el volumen no pueden ser números negativos."
- 
+                return False, f"Ese combustible no lo manejamos. Usa uno de estos: {', '.join(self.COMBUSTIBLES_VALIDOS)}."
             if tiempo_estimado_dias <= 0:
                 return False, "El tiempo estimado del viaje debe ser mayor a 0."
- 
+
+            # Documento final
             documento = {
                 "codigo_ruta": codigo_ruta,
                 "origen": origen,
                 "destino": destino,
                 "tiempo_estimado_dias": tiempo_estimado_dias,
                 "estado_viaje": "EN_TRANSITO",
- 
-                "peso_mercancia_kg": peso_mercancia_kg,
-                "volumen_m3": volumen_m3,
+                "peso_mercancia_kg": capacidad_carga,
+                "volumen_m3": 0,
                 "tipo_combustible": tipo_combustible,
- 
                 "vehiculo": {
-                    # lo dejo en mayúsculas para que "jgkda128" y
-                    # "JGKDA128" no se guarden como si fueran dos
-                    # vehículos distintos
-                    "patente": str(datos_viaje.get("patente_vehiculo", "")).strip().upper(),
+                    "vin": vin,
+                    "patente": patente,
+                    "marca": marca,
+                    "modelo": modelo_vehiculo,
+                    "ano_fabricacion": ano_fabricacion,
+                    "tipo_combustible": tipo_combustible,
+                    "capacidad_carga_max_Kg": capacidad_carga
                 },
                 "conductor": {
-                    "rut_id": str(datos_viaje.get("rut_conductor", "")).strip(),
-                    "nombre": str(datos_viaje.get("nombre_conductor", "")).strip(),
+                    "rut_id": rut_id,
+                    "nombre": nombre,
+                    "primer_apellido": primer_apellido
                 },
- 
                 "telemetria_iot": []
             }
- 
+
             self.coleccion.insert_one(documento)
             return True, f"Viaje '{codigo_ruta}' creado con éxito."
- 
+
         except (ValueError, TypeError):
-            # esto salta si peso/volumen/tiempo no se pudieron convertir a número
             return False, "El peso, el volumen y el tiempo estimado deben ser números válidos."
         except Exception as e:
-            # cualquier otro error inesperado (ej. se cayó la conexión
-            # a mitad de camino) lo atrapamos acá para no reventar
             print(f"ERROR interno en crear_viaje {e}")
             return False, "Ocurrió un error inesperado al crear el viaje."
- 
+
+    
  
     
     # Consultas (leer datos)
@@ -158,56 +160,86 @@ class LogiTrackModel:
         alertas_encontradas = []
         try:
             cursor = self.coleccion.find(
-                {"telemetria_iot.alerta_sistema": {"$ne": None}}
+                {"telemetria_iot.alertas": {"$ne": None}}   # 👈 corregido
             )
             for viaje in cursor:
                 for lectura in viaje.get("telemetria_iot", []):
-                    if lectura.get("alerta_sistema"):
+                    if lectura.get("alertas"):   # 👈 corregido
                         alertas_encontradas.append({
                             "codigo_ruta": viaje.get("codigo_ruta"),
-                            "alerta": lectura.get("alerta_sistema"),
+                            "alerta_sistema": lectura.get("alertas"),   # 👈 renombrado para que la vista lo muestre
+                            "velocidad_kmh": lectura.get("velocidad_kmh"),
                             "timestamp": lectura.get("timestamp")
                         })
         except Exception as e:
             print(f"ERROR interno en obtener_alertas_activas {e}")
- 
+
         return alertas_encontradas
+
  
     
     # Actualizar telemetría (cada vez que llega una lectura del sensor)
+    # Actualizar telemetría (cada vez que llega una lectura del sensor)
     def actualizar_telemetria(self, codigo_ruta, datos_sensores):
-        # Mismo cuidado que en crear_viaje: si la vista canceló el
-        # ingreso, datos_sensores puede llegar como None.
         if not datos_sensores or not isinstance(datos_sensores, dict):
             return False, "No se pudo actualizar: los datos del sensor no son válidos."
- 
+
         if not codigo_ruta:
             return False, "Debes indicar un código de ruta."
- 
+
         if not self.existe_ruta(codigo_ruta):
             return False, f"No existe ningún viaje con el código '{codigo_ruta}'."
- 
+
         try:
-            km = float(datos_sensores.get("kilometros_recorridos_tramo", 0))
-            litros = float(datos_sensores.get("litros_consumidos", 0))
- 
-            if km < 0 or litros < 0:
-                return False, "Los kilómetros y los litros no pueden ser negativos."
- 
+            # Obtener tipo de combustible del viaje
+            tipo_combustible = self.obtener_combustible_viaje(codigo_ruta)
+
+            # Factores de consumo (litros/km)
+            FACTORES_CONSUMO = {
+                "Diesel": 0.23,   # ≈23 L/100 km
+                "Gasolina": 0.12,
+                "GNC": 0.09,
+                "GLP": 0.10,
+                "Híbrido": 0.07
+            }
+
+            km = float(datos_sensores.get("km_recorridos", 0))
+            if km < 0:
+                return False, "Los kilómetros no pueden ser negativos."
+
+            # Calcular litros consumidos automáticamente
+            factor = FACTORES_CONSUMO.get(tipo_combustible, 0.2)
+            litros = round(km * factor, 2)
+
+            # Calcular emisiones de CO2
+            FACTORES_EMISION = {
+                "Diesel": 2.68,
+                "Gasolina": 2.35,
+                "GNC": 2.72,
+                "GLP": 1.66,
+                "Híbrido": 1.45
+            }
+            factor_emision = FACTORES_EMISION.get(tipo_combustible, 2.68)
+            co2_kg = round(litros * factor_emision, 2)
+
+            # Guardar valores calculados en el diccionario
+            datos_sensores["litros_consumidos"] = litros
+            datos_sensores["emision_co2_kg"] = co2_kg
             datos_sensores["timestamp"] = datetime.now()
- 
+
             self.coleccion.update_one(
                 {"codigo_ruta": codigo_ruta},
                 {"$push": {"telemetria_iot": datos_sensores}}
             )
- 
+
             return True, f"Telemetría guardada para la ruta '{codigo_ruta}'."
- 
+
         except (ValueError, TypeError):
-            return False, "Los kilómetros y los litros deben ser números válidos."
+            return False, "Los kilómetros deben ser un número válido."
         except Exception as e:
             print(f"ERROR interno en actualizar_telemetria {e}")
             return False, "Ocurrió un error inesperado al guardar la telemetría."
+
  
     # Eliminar un viaje (por si se ingresó algo mal)
     def eliminar_viaje(self, codigo_ruta):
@@ -231,25 +263,31 @@ class LogiTrackModel:
                 {"$unwind": "$telemetria_iot"},
                 {
                     "$group": {
-                        "_id": "$vehiculo.patente",
-                        "total_km": {"$sum": "$telemetria_iot.kilometros_recorridos_tramo"},
-                        "total_litros": {"$sum": "$telemetria_iot.litros_consumidos"},
+                        "_id": None,
+                        "total_km_recorridos": {"$sum": "$telemetria_iot.kilometros_recorridos"},
+                        "total_litros_consumidos": {"$sum": "$telemetria_iot.litros_consumidos"},
                         "total_co2_kg": {"$sum": "$telemetria_iot.emision_co2_kg"}
                     }
-                },
-                {"$sort": {"total_co2_kg": -1}}
+                }
             ]
- 
-            resultados = list(self.coleccion.aggregate(pipeline))
- 
-            for fila in resultados:
-                fila["total_co2_toneladas"] = round(fila.get("total_co2_kg", 0) / 1000, 4)
- 
-            return resultados
- 
+            resultado = list(self.coleccion.aggregate(pipeline))
+
+            if resultado:
+                fila = resultado[0]
+                return {
+                    "total_km_recorridos": round(fila.get("total_km_recorridos", 0), 2),
+                    "total_litros_consumidos": round(fila.get("total_litros_consumidos", 0), 2),
+                    "total_co2_kg": round(fila.get("total_co2_kg", 0), 2)
+                }
+            else:
+                return {}
+
         except Exception as e:
             print(f"ERROR interno en obtener_reporte_carbono {e}")
-            return []
+            return {}
+
+
+    
  
     # Cerrar la conexión al salir del programa
     def cerrar_conexion(self):

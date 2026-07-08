@@ -14,9 +14,13 @@ class VistaConsole:
         print("2. Registrar lectura de telemetría (sensores IoT)")
         print("3. Ver alertas activas")
         print("4. Ver reporte de sostenibilidad (huella de carbono)")
-        print("5. Ejecutar pruebas de diagnóstico (Tests)")
-        print("6. Salir")
+        print("5. Listar viajes registrados")
+        print("6. Actualizar viaje")
+        print("7. Eliminar viaje")
+        print("8. Ejecutar pruebas de diagnóstico (Tests)")
+        print("9. Salir")
         return input("Seleccione una opción: ")
+
 
     def mostrar_mensaje(self, mensaje):
         print(f" {mensaje}")
@@ -77,13 +81,12 @@ class VistaConsole:
     # ------------------------------------------------------------------
     # Opcion 2: Telemetria (sensores IoT)
     def solicitar_codigo_ruta(self):
-        return input("\nIngrese el código de la ruta a actualizar: ")
+        return input("\nIngrese el código de la ruta: ")
 
     def solicitar_datos_telemetria(self):
-        """
-        Solicita una lectura de sensores IoT para una ruta existente.
-        Retorna un diccionario con los datos de telemetría.
-        """
+    #    Solicita una lectura de sensores IoT para una ruta existente.
+    # Retorna un diccionario con los datos de telemetría.
+    
         print("\n--- Registro de lectura de telemetría ---")
         try:
             latitud = float(input("Latitud actual: "))
@@ -92,7 +95,6 @@ class VistaConsole:
             temperatura_motor_c = float(input("Temperatura del motor (°C): "))
             nivel_combustible_porcentaje = float(input("Nivel de combustible (%): "))
             km_recorridos = float(input("Kilómetros recorridos desde última lectura: "))
-            litros_consumidos = float(input("Litros de combustible consumidos: "))
             alerta_sistema = input("Alerta del sistema (Enter si no hay ninguna): ").strip()
 
             return {
@@ -104,12 +106,13 @@ class VistaConsole:
                 "temperatura_motor_c": temperatura_motor_c,
                 "nivel_combustible_porcentaje": nivel_combustible_porcentaje,
                 "km_recorridos": km_recorridos,
-                "litros_consumidos": litros_consumidos,
+                # litros_consumidos y emision_co2_kg se calculan en el modelo
                 "alertas": alerta_sistema if alerta_sistema else None
             }
         except ValueError:
             self.mostrar_mensaje("Error: Dato inválido ingresado. Se cancela el registro de telemetria.")
             return {}
+
 
     # ------------------------------------------------------------------
     # Opcion 3: Alertas Activas
