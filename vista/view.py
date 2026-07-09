@@ -9,7 +9,7 @@ class VistaConsole:
  
     def mostrar_menu(self):
         print("\n" + "=" * 55)
-        print("            SISTEMA LOGITRACK_GLOBAL")
+        print(" " * 15 + "SISTEMA LOGITRACK_GLOBAL")
         print("=" * 55)
         print(" 1. Registrar nuevo viaje (vehículo + conductor + ruta)")
         print(" 2. Registrar lectura de telemetría (sensores IoT)")

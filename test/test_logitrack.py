@@ -13,14 +13,16 @@ class TestSistemaFlota(unittest.TestCase):
 
     CODIGO_PRUEBA = "TEST-QA-999"
 
-    def setUp(self):
-        # setUp se ejecuta ANTES de cada test. Me conecto a la base
-        # de datos real 
-        self.modelo = LogiTrackModel()
+def setUp(self):
+    try:
+        # Base de datos separada, exclusiva para tests. Así nunca
+        # tocamos la colección real de producción (logitrack_db).
+        self.modelo = LogiTrackModel(database_name="logitrack_test_db")
+    except ConnectionError as e:
+        self.skipTest(f"Mongo no disponible: {e}")
 
-        # por si quedó algo pegado de una corrida anterior que falló
-        if self.modelo.existe_ruta(self.CODIGO_PRUEBA):
-            self.modelo.eliminar_viaje(self.CODIGO_PRUEBA)
+    if self.modelo.existe_ruta(self.CODIGO_PRUEBA):
+        self.modelo.eliminar_viaje(self.CODIGO_PRUEBA)
 
     def tearDown(self):
         # tearDown se ejecuta DESPUÉS de cada test, pase lo que pase.

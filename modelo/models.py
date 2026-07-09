@@ -6,7 +6,6 @@
  
 from pymongo import MongoClient
 from datetime import datetime
-import sys
  
  
 class LogiTrackModel:
@@ -52,7 +51,7 @@ class LogiTrackModel:
         except Exception as e:
             print(f"\n[ERROR] No se pudo conectar a MongoDB: {e}")
             print("Revisa que el servicio de MongoDB esté corriendo.")
-            sys.exit(1)
+            raise ConnectionError("No se pudo conectar a MongoDB. El programa no puede continuar.") from e
  
     # Crear un viaje nuevo
     def crear_viaje(self, datos_viaje):
