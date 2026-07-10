@@ -1,12 +1,19 @@
-
 # actualizar la telemetría de los sensores, gestionar la jerarquía de
 # conductores y sacar los reportes de CO2. El controller.py es el que
 # llama a estas funciones, la vista nunca debería tocar este archivo
 # directamente.
- 
 from pymongo import MongoClient
+from pymongo.errors import OperationFailure, ServerSelectionTimeoutError, ConfigurationError
 from datetime import datetime
+from dotenv import load_dotenv
+import os
 import sys
+ 
+# Cargamos las variables desde el archivo .env (si existe). Así la URI
+# de conexión, el usuario, la contraseña y el nombre de la base de
+# datos no quedan hardcodeados ni suben al repositorio (el .env está
+# en el .gitignore).
+load_dotenv()
  
  
 class LogiTrackModel:
@@ -34,25 +41,104 @@ class LogiTrackModel:
     }
  
     # Tipos de licencia de conducir que aceptamos para el conductor
-    LICENCIAS_VALIDAS = {"A1", "A2", "A3", "B", "C", "D", "E", "F"}
+    LICENCIAS_VALIDAS = {"A1", "A2", "A3", "A4", "A5", "B", "C", "D", "E", "F"}
  
-    def __init__(self, uri="mongodb://localhost:27017/", database_name="logitrack_db"):
-        # Apenas se crea el modelo, intento conectarme a Mongo.
-        # Si el servicio no está prendido, mejor avisar altiro con un
-        # mensaje entendible en vez de que reviente con un error feo.
+    def __init__(self, uri=None, database_name=None):
+        """
+        Si el .env trae directamente MONGO_URI completo, se respeta
+        ese valor (útil para MongoDB Atlas, que entrega la URI ya
+        armada con su propio usuario de mínimo privilegio).
+        """
+        database_name = database_name or os.getenv("MONGO_DB_NAME", "logitrack_db")
+        uri = uri or self._construir_uri(database_name)
+ 
+        # serverSelectionTimeoutMS: no dejamos que la app se cuelgue
+        # esperando indefinidamente si Mongo no está disponible.
+        # tls: se activa solo si el .env lo pide explícitamente
+        # (por ejemplo, para conectarse a un Atlas o a un servidor
+        # remoto real); en un venv local con auth básica no hace falta.
+        usar_tls = os.getenv("MONGO_TLS", "false").strip().lower() == "true"
+ 
         try:
-            self.client = MongoClient(uri, serverSelectionTimeoutMS=2000)
+            self.client = MongoClient(
+                uri,
+                serverSelectionTimeoutMS=3000,
+                tls=usar_tls
+            )
             self.client.server_info()  # esto "obliga" a probar la conexión ya
  
             self.db = self.client[database_name]
             self.coleccion = self.db["viajes_monitoreo"]
+            self.coleccion_conductores = self.db["conductores"]
  
-            print("Conectado a MongoDB sin problemas.")
+            print(f"Conectado a MongoDB sin problemas (base de datos: '{database_name}').")
+ 
+        except OperationFailure:
+            # Esto salta cuando el servidor SÍ respondió pero el
+            # usuario/contraseña están mal, o el usuario no tiene
+            # permisos sobre esa base de datos. OJO: nunca imprimimos
+            # la URI completa acá porque trae la contraseña adentro.
+            print("\n[ERROR] Usuario o contraseña incorrectos, o el usuario no "
+                  "tiene permisos sobre la base de datos configurada.")
+            print("Revisa MONGO_APP_USER / MONGO_APP_PASSWORD en tu archivo .env "
+                  "y que el usuario tenga el rol readWrite sobre la base correcta.")
+            sys.exit(1)
+ 
+        except ServerSelectionTimeoutError:
+            # El servidor no contestó a tiempo: puede que no esté
+            # prendido, que el host/puerto estén mal, o que un
+            # firewall esté bloqueando la conexión.
+            print("\n[ERROR] No se pudo contactar al servidor de MongoDB.")
+            print("Revisa que el servicio esté corriendo y que el host/puerto "
+                  "en tu .env sean correctos.")
+            sys.exit(1)
+ 
+        except ConfigurationError as e:
+            print(f"\n[ERROR] La configuración de conexión no es válida: {e}")
+            print("Revisa el formato de las variables en tu archivo .env.")
+            sys.exit(1)
  
         except Exception as e:
             print(f"\n[ERROR] No se pudo conectar a MongoDB: {e}")
-            print("Revisa que el servicio de MongoDB esté corriendo.")
             sys.exit(1)
+ 
+    def _construir_uri(self, database_name):
+        """
+        Arma la URI de conexión a partir de variables de entorno
+        separadas. Si el .env ya trae MONGO_URI completo, se usa
+        directamente esa (útil para Atlas / entornos donde la URI
+        viene dada). Si no, se construye con usuario y contraseña
+        del usuario de mínimo privilegio (MONGO_APP_USER).
+        """
+        uri_completa = os.getenv("MONGO_URI")
+        if uri_completa:
+            return uri_completa
+ 
+        host = os.getenv("MONGO_HOST", "localhost")
+        puerto = os.getenv("MONGO_PORT", "27017")
+        usuario = os.getenv("MONGO_APP_USER", "")
+        password = os.getenv("MONGO_APP_PASSWORD", "")
+        auth_source = os.getenv("MONGO_AUTH_SOURCE", database_name)
+ 
+        if usuario and password:
+            # authSource=logitrack_db porque el usuario de la app se
+            # crea DENTRO de esa base, no en admin. Así, aunque alguien
+            # obtenga estas credenciales, solo puede tocar esta base
+            # de datos y nada más del servidor (principio de menor
+            # privilegio).
+            return (
+                f"mongodb://{usuario}:{password}@{host}:{puerto}/"
+                f"?authSource={auth_source}"
+            )
+ 
+        # Fallback sin autenticación, solo pensado para desarrollo
+        # local rápido (por ejemplo, un Mongo recién instalado sin
+        # auth activada todavía). En cualquier entorno real, siempre
+        # debe usarse un usuario con permisos mínimos.
+        print("[AVISO] No se encontraron credenciales (MONGO_APP_USER / "
+              "MONGO_APP_PASSWORD) en el .env. Conectando sin autenticación, "
+              "solo recomendado para desarrollo local.")
+        return f"mongodb://{host}:{puerto}/"
  
     # Crear un viaje nuevo
     def crear_viaje(self, datos_viaje):
@@ -86,7 +172,6 @@ class LogiTrackModel:
                     f"{', '.join(self.COMBUSTIBLES_VALIDOS)}."
                 )
  
-           
             peso_mercancia_kg = float(peso_mercancia_kg)
             tiempo_estimado_dias = float(tiempo_estimado_dias)
  
@@ -195,9 +280,8 @@ class LogiTrackModel:
             print(f"[ERROR interno en crear_viaje] {e}")
             return False, "Ocurrió un error inesperado al crear el viaje."
  
-
     # Consultas (leer datos)
-
+ 
     def existe_ruta(self, codigo_ruta):
         if not codigo_ruta:
             return False
@@ -237,7 +321,7 @@ class LogiTrackModel:
  
     def obtener_alertas_activas(self):
         # Cada lectura de telemetría puede traer una lista de alertas
-        # puede haber más de una alerta en la misma lectura. 
+        # puede haber más de una alerta en la misma lectura.
         alertas_encontradas = []
         try:
             cursor = self.coleccion.find({"telemetria_iot.alertas.0": {"$exists": True}})
@@ -254,9 +338,7 @@ class LogiTrackModel:
  
         return alertas_encontradas
  
-    # ---------------------------------------------------------
-    # Actualizar telemetría (cada vez que llega una lectura del sensor)
-    # ---------------------------------------------------------
+        # Actualizar telemetría (cada vez que llega una lectura del sensor)
     def actualizar_telemetria(self, codigo_ruta, datos_sensores):
         if not datos_sensores or not isinstance(datos_sensores, dict):
             return False, "No se pudo actualizar: los datos del sensor no son válidos."
@@ -320,9 +402,8 @@ class LogiTrackModel:
             print(f"[ERROR interno en actualizar_telemetria] {e}")
             return False, "Ocurrió un error inesperado al guardar la telemetría."
  
-   
     # Eliminar un viaje (por si se ingresó algo mal)
-
+ 
     def eliminar_viaje(self, codigo_ruta):
         if not codigo_ruta:
             return False, "Debes indicar un código de ruta."
@@ -337,65 +418,234 @@ class LogiTrackModel:
             print(f"[ERROR interno en eliminar_viaje] {e}")
             return False, "Ocurrió un error inesperado al eliminar el viaje."
  
- 
-    
-    # Jerarquía de conductores (tutor / supervisor)
+# Jerarquía de conductores (tutor / supervisor)
     def asignar_tutor(self, rut_novato, rut_tutor):
         # Un conductor experimentado (tutor) queda a cargo de uno o
-        # varios conductores novatos.
+        # varios conductores novatos. Trabaja sobre la colección
+        # maestra "conductores", no sobre los viajes.
         if not rut_novato or not rut_tutor:
             return False, "Debes indicar el RUT del novato y del tutor."
- 
+
         if rut_novato == rut_tutor:
             return False, "Un conductor no puede ser tutor de sí mismo."
- 
+
         try:
-            novato_existe = self.coleccion.count_documents({"conductor.rut_id": rut_novato}) > 0
-            tutor_existe = self.coleccion.count_documents({"conductor.rut_id": rut_tutor}) > 0
- 
-            if not novato_existe or not tutor_existe:
+            if not self.existe_conductor(rut_novato) or not self.existe_conductor(rut_tutor):
                 return False, "No se encontró el conductor novato o el tutor."
- 
-            #  uso update_many, no update_one, porque el mismo
-            # conductor puede aparecer en más de un viaje
-            self.coleccion.update_many(
-                {"conductor.rut_id": rut_novato},
-                {"$set": {"conductor.tutor": rut_tutor}}
+
+            self.coleccion_conductores.update_one(
+                {"rut_id": rut_novato},
+                {"$set": {"tutor": rut_tutor}}
             )
-            self.coleccion.update_many(
-                {"conductor.rut_id": rut_tutor},
-                {"$addToSet": {"conductor.supervisa_a": rut_novato}}
+            self.coleccion_conductores.update_one(
+                {"rut_id": rut_tutor},
+                {"$addToSet": {"supervisa_a": rut_novato}}
             )
- 
+
             return True, f"El conductor {rut_tutor} ahora supervisa a {rut_novato}."
- 
+
         except Exception as e:
             print(f"[ERROR interno en asignar_tutor] {e}")
             return False, "Error interno al asignar el tutor."
- 
+
     def asignar_supervisor(self, rut_conductor, id_jefe_flota):
         # Un jefe de flota regional queda como supervisor de un conductor.
         if not rut_conductor or not id_jefe_flota:
             return False, "Debes indicar el RUT del conductor y el ID del jefe de flota."
- 
+
         try:
-            existe = self.coleccion.count_documents({"conductor.rut_id": rut_conductor}) > 0
-            if not existe:
+            if not self.existe_conductor(rut_conductor):
                 return False, "No se encontró el conductor."
- 
-            self.coleccion.update_many(
-                {"conductor.rut_id": rut_conductor},
-                {"$set": {"conductor.supervisor": id_jefe_flota}}
+
+            self.coleccion_conductores.update_one(
+                {"rut_id": rut_conductor},
+                {"$set": {"supervisor": id_jefe_flota}}
             )
- 
+
             return True, f"El conductor {rut_conductor} ahora está bajo supervisión del jefe {id_jefe_flota}."
- 
+
         except Exception as e:
             print(f"[ERROR interno en asignar_supervisor] {e}")
             return False, "Error interno al asignar el supervisor."
+    # CRUD de la colección maestra "conductores"
+    # ---------------------------------------------------------
+    def crear_conductor(self, datos_conductor):
+        # Alta de un conductor nuevo, independiente de si ya tiene
+        # o no un viaje asignado.
+        if not datos_conductor or not isinstance(datos_conductor, dict):
+            return False, "No se pudo crear el conductor: los datos ingresados no son válidos."
  
+        try:
+            rut_id = str(datos_conductor.get("rut_id", "")).strip()
+            nombre = str(datos_conductor.get("nombre", "")).strip()
+            primer_apellido = str(datos_conductor.get("primer_apellido", "")).strip()
+            nacionalidad = str(datos_conductor.get("nacionalidad", "")).strip()
+            tipo_licencia = str(datos_conductor.get("tipo_licencia", "")).strip().upper()
+            fecha_vencimiento_str = str(datos_conductor.get("fecha_vencimiento", "")).strip()
+            anos_experiencia = datos_conductor.get("anos_experiencia", 0)
+            observaciones = str(datos_conductor.get("observaciones", "")).strip()
  
+            if not rut_id or not nombre:
+                return False, "El RUT y el nombre del conductor son obligatorios."
  
+            if self.existe_conductor(rut_id):
+                return False, f"Ya existe un conductor con el RUT '{rut_id}'."
+ 
+            if tipo_licencia and tipo_licencia not in self.LICENCIAS_VALIDAS:
+                return False, (
+                    f"Tipo de licencia inválido. Usa una de estas: "
+                    f"{', '.join(sorted(self.LICENCIAS_VALIDAS))}."
+                )
+ 
+            anos_experiencia = float(anos_experiencia)
+            if anos_experiencia < 0:
+                return False, "Los años de experiencia no pueden ser negativos."
+ 
+            documento = {
+                "rut_id": rut_id,
+                "nombre": nombre,
+                "primer_apellido": primer_apellido,
+                "nacionalidad": nacionalidad,
+                "tipo_licencia": tipo_licencia,
+                "fecha_vencimiento": fecha_vencimiento_str,
+                "anos_experiencia": anos_experiencia,
+                "observaciones": observaciones,
+                # igual que en crear_viaje: empiezan vacíos, se llenan
+                # con asignar_tutor() / asignar_supervisor()
+                "tutor": None,
+                "supervisa_a": [],
+                "supervisor": None
+            }
+ 
+            self.coleccion_conductores.insert_one(documento)
+            return True, f"Conductor '{nombre}' (RUT {rut_id}) creado con éxito."
+ 
+        except (ValueError, TypeError):
+            return False, "Los años de experiencia deben ser un número válido."
+        except Exception as e:
+            print(f"[ERROR interno en crear_conductor] {e}")
+            return False, "Ocurrió un error inesperado al crear el conductor."
+ 
+    def existe_conductor(self, rut_id):
+        if not rut_id:
+            return False
+        try:
+            return self.coleccion_conductores.count_documents({"rut_id": rut_id}) > 0
+        except Exception as e:
+            print(f"[ERROR interno en existe_conductor] {e}")
+            return False
+    def listar_conductores(self):
+        # Trae todos los conductores registrados como entidad propia,
+        # sin importar si ya tienen o no un viaje asignado.
+        try:
+            cursor = self.coleccion_conductores.find({}, {"_id": 0})
+            return list(cursor)
+        except Exception as e:
+            print(f"[ERROR interno en listar_conductores] {e}")
+            return []
+
+    def obtener_conductor(self, rut_id):
+        # Detalle de un solo conductor por su RUT/ID.
+        if not rut_id:
+            return None
+        try:
+            return self.coleccion_conductores.find_one({"rut_id": rut_id}, {"_id": 0})
+        except Exception as e:
+            print(f"[ERROR interno en obtener_conductor] {e}")
+            return None
+        
+    def actualizar_conductor(self, rut_id, datos_nuevos):
+        # Actualiza los datos propios del conductor (no la jerarquía:
+        # eso se hace con asignar_tutor / asignar_supervisor).
+        if not rut_id:
+            return False, "Debes indicar el RUT del conductor a actualizar."
+
+        if not datos_nuevos or not isinstance(datos_nuevos, dict):
+            return False, "No se pudo actualizar: los datos ingresados no son válidos."
+
+        if not self.existe_conductor(rut_id):
+            return False, f"No existe ningún conductor con el RUT '{rut_id}'."
+
+        try:
+            campos_permitidos = [
+                "nombre", "primer_apellido", "nacionalidad",
+                "tipo_licencia", "fecha_vencimiento",
+                "anos_experiencia", "observaciones"
+            ]
+
+            actualizacion = {}
+            for campo in campos_permitidos:
+                if campo in datos_nuevos and datos_nuevos[campo] not in (None, ""):
+                    actualizacion[campo] = datos_nuevos[campo]
+
+            if not actualizacion:
+                return False, "No se ingresó ningún dato nuevo para actualizar."
+
+            if "tipo_licencia" in actualizacion:
+                actualizacion["tipo_licencia"] = str(actualizacion["tipo_licencia"]).strip().upper()
+                if actualizacion["tipo_licencia"] not in self.LICENCIAS_VALIDAS:
+                    return False, (
+                        f"Tipo de licencia inválido. Usa una de estas: "
+                        f"{', '.join(sorted(self.LICENCIAS_VALIDAS))}."
+                    )
+
+            if "anos_experiencia" in actualizacion:
+                actualizacion["anos_experiencia"] = float(actualizacion["anos_experiencia"])
+                if actualizacion["anos_experiencia"] < 0:
+                    return False, "Los años de experiencia no pueden ser negativos."
+
+            self.coleccion_conductores.update_one(
+                {"rut_id": rut_id},
+                {"$set": actualizacion}
+            )
+
+            return True, f"Conductor {rut_id} actualizado con éxito."
+
+        except (ValueError, TypeError):
+            return False, "Los años de experiencia deben ser un número válido."
+        except Exception as e:
+            print(f"[ERROR interno en actualizar_conductor] {e}")
+            return False, "Ocurrió un error inesperado al actualizar el conductor."    
+
+
+    def eliminar_conductor(self, rut_id):
+        # Antes de eliminar, se limpia la jerarquía para no dejar
+        # referencias "huérfanas" en otros conductores.
+        if not rut_id:
+            return False, "Debes indicar el RUT del conductor a eliminar."
+
+        conductor = self.obtener_conductor(rut_id)
+        if not conductor:
+            return False, f"No existe ningún conductor con el RUT '{rut_id}'."
+
+        try:
+            tutor_actual = conductor.get("tutor")
+            if tutor_actual:
+                # Se lo saco de la lista de supervisados de su tutor.
+                self.coleccion_conductores.update_one(
+                    {"rut_id": tutor_actual},
+                    {"$pull": {"supervisa_a": rut_id}}
+                )
+
+            supervisados = conductor.get("supervisa_a", [])
+            if supervisados:
+                # A los novatos que este conductor tutoraba, les quito
+                # la referencia porque su tutor ya no va a existir.
+                self.coleccion_conductores.update_many(
+                    {"rut_id": {"$in": supervisados}},
+                    {"$set": {"tutor": None}}
+                )
+
+            self.coleccion_conductores.delete_one({"rut_id": rut_id})
+            return True, f"Conductor {rut_id} eliminado con éxito."
+
+        except Exception as e:
+            print(f"[ERROR interno en eliminar_conductor] {e}")
+            return False, "Ocurrió un error inesperado al eliminar el conductor."
+
+
+
+
     # Reporte de huella de carbono
     def obtener_reporte_carbono(self):
         # Consolida, por vehículo (patente), el total de kilómetros,
@@ -427,7 +677,6 @@ class LogiTrackModel:
         except Exception as e:
             print(f"[ERROR interno en obtener_reporte_carbono] {e}")
             return []
- 
  
     # Cerrar la conexión al salir del programa
     def cerrar_conexion(self):
