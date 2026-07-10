@@ -6,9 +6,17 @@ from test.test_logitrack import TestSistemaFlota
  
 class ControladorLogistica:
     def __init__(self):
-        self.modelo = LogiTrackModel()
         self.vista = VistaConsole()
+<<<<<<< HEAD
  
+=======
+        try:
+            self.modelo = LogiTrackModel()
+        except ConnectionError as e:
+            self.vista.mostrar_mensaje(f"ERROR CRÍTICO: {e}")
+            raise SystemExit(1)
+
+>>>>>>> ef2fea4c6a7d59cab8868278c8f128e870cb7033
     def iniciar(self):
         try:
             self._loop_principal()

@@ -11,7 +11,7 @@ class VistaConsole:
     def mostrar_menu(self):
         """Menú principal: solo categorías. Devuelve la letra elegida."""
         print("\n" + "=" * 55)
-        print("            SISTEMA LOGITRACK_GLOBAL")
+        print(" " * 15 + "SISTEMA LOGITRACK_GLOBAL")
         print("=" * 55)
         print(" A. Viajes y Telemetría")
         print(" B. Reportes")
