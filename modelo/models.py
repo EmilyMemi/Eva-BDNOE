@@ -5,12 +5,9 @@
 from pymongo import MongoClient
 from pymongo.errors import OperationFailure, ServerSelectionTimeoutError, ConfigurationError
 from datetime import datetime
-<<<<<<< HEAD
 from dotenv import load_dotenv
 import os
 import sys
-=======
->>>>>>> ef2fea4c6a7d59cab8868278c8f128e870cb7033
  
 # Cargamos las variables desde el archivo .env (si existe). Así la URI
 # de conexión, el usuario, la contraseña y el nombre de la base de
@@ -103,12 +100,8 @@ class LogiTrackModel:
  
         except Exception as e:
             print(f"\n[ERROR] No se pudo conectar a MongoDB: {e}")
-<<<<<<< HEAD
-            sys.exit(1)
-=======
             print("Revisa que el servicio de MongoDB esté corriendo.")
             raise ConnectionError("No se pudo conectar a MongoDB. El programa no puede continuar.") from e
->>>>>>> ef2fea4c6a7d59cab8868278c8f128e870cb7033
  
     def _construir_uri(self, database_name):
         """
